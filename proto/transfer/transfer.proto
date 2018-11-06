@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package transfer;
+
+option java_multiple_files = true;
+option java_package="com.jingoal.dfsclient.transfer";
+
+// This file contains a set of protocol buffer messages
+// which define the file transfer APIs between dfs client and it's server.
+
+// FileInfo represents file metadata.
+message FileInfo{
+    string id     = 1;
+    string name   = 2;
+    int64  size   = 3;
+    int64  domain = 4;
+    int64  user   = 5;
+    string md5    = 6;
+    string biz    = 11;
+}
+
+// Chunk represents the segment of file content.
+message Chunk {
+    int64 pos     = 1;
+    int64 length  = 2;
+    bytes payload = 3;
+}
+
+// ClientDescription represents the description of client.
+message ClientDescription {
+    string desc = 1;
+}
+
+// The request message to negotiate chunk size.
+message NegotiateChunkSizeReq {
+   int64 size = 1;
+}
+
+// The reply message to negotiate chunk size.
+message NegotiateChunkSizeRep {
+   int64 size = 1;
+}
+
+// The request message to put file.
+message PutFileReq {
+    FileInfo info  = 1;
+    Chunk    chunk = 2;
+}
+
+// The reply message to put file.
+message PutFileRep {
+    FileInfo file = 1;
+}
+
+// The request message to get file.
+message GetFileReq {
+    string id     = 1;
+    int64  domain = 2;
+}
+
+// The reply message to get file.
+message GetFileRep {
+    oneof result {
+        Chunk chunk   = 1;
+        FileInfo info = 2;
+    }
+}
+
+// The request message to remove file.
+message RemoveFileReq {
+    string id     = 1;
+    int64  domain = 2;
+
+    ClientDescription desc  = 10;
+}
+
+// The reply message to remove file.
+message RemoveFileRep {
+    bool result = 1;
+}
+
+// The request message to duplicate file.
+message DuplicateReq {
+    string id     = 1;
+    int64  domain = 2;
+}
+
+// The reply message to duplicate file.
+message DuplicateRep {
+    string id = 1;
+}
+
+// The request message to check existentiality of a file.
+message ExistReq {
+    string id     = 1;
+    int64  domain = 2;
+}
+
+// The reply message to check existentiality of a file.
+message ExistRep {
+    bool result = 1;
+}
+
+// The request message to get a file by its md5.
+message GetByMd5Req {
+    string md5    = 1;
+    int64  domain = 2;
+    int64  size   = 3;
+}
+
+// The reply message to get a file by its md5.
+message GetByMd5Rep {
+    string fid = 1;
+}
+
+// The request message to copy a file.
+message CopyReq {
+    string srcFid    = 1;
+    int64  srcDomain = 2;
+    int64  dstDomain = 3;
+    int64  dstUid    = 4;
+    string dstBiz    = 5;
+}
+
+// The reply message to copy a file.
+message CopyRep {
+    string fid = 1;
+}
+
+// File transfer service definition.
+service FileTransfer{
+    // To negotiate the chunk size between client and server.
+    rpc NegotiateChunkSize (NegotiateChunkSizeReq) returns (NegotiateChunkSizeRep) {}
+
+    // Put file from client to server.
+    rpc PutFile (stream PutFileReq) returns (PutFileRep) {}
+
+    // Get file from server to client.
+    rpc GetFile (GetFileReq) returns (stream GetFileRep) {}
+
+    // Remove deletes a file.
+    rpc RemoveFile (RemoveFileReq) returns (RemoveFileRep) {}
+
+    // Duplicate duplicates a file, returns a new fid.
+    rpc Duplicate (DuplicateReq) returns (DuplicateRep) {}
+
+    // Exist checks existentiality of a file.
+    rpc Exist (ExistReq) returns (ExistRep) {}
+
+    // GetByMd5 gets a file by its md5.
+    rpc GetByMd5 (GetByMd5Req) returns (GetByMd5Rep) {}
+
+    // Exist checks existentiality of a file.
+    rpc ExistByMd5 (GetByMd5Req) returns (ExistRep) {}
+
+    // Copy copies a file and returns its fid.
+    rpc Copy (CopyReq) returns (CopyRep) {}
+
+    // Stat gets file info with given fid.
+    rpc Stat (GetFileReq) returns (PutFileRep) {}
+}

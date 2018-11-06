@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package discovery;
+
+option java_multiple_files = true;
+option java_package = "com.jingoal.dfsclient.discovery";
+
+// This file contains a set of protocol buffer messages
+// which define the server discovery APIs between dfs client and its server.
+
+// Dfs Server
+message DfsServer {
+    enum Status {
+        ONLINE  = 0;
+        USED    = 1;
+        GOAWAY  = 2; // will be down
+        OFFLINE = 3;
+    }
+    string id      = 1;
+    string uri     = 2; // ip:port
+    int32  weight  = 3;
+    int32  load    = 4;
+    int64  free    = 5; // free disk space
+    Status status  = 6;
+    int32 priority = 7; // priority of server, positive integer.
+
+    repeated string preferred = 8;
+}
+
+// DfsServerList represents a list of DfsServer.
+message DfsServerList {
+    repeated DfsServer server = 1;
+}
+
+// Heartbeat represents a heartbeat message.
+message Heartbeat {
+    int64 timestamp = 1;
+}
+
+// DfsClient represents client info.
+message DfsClient {
+    string id  = 1;
+    string uri = 2; // ip:port
+}
+
+// The message for DfsClient info.
+message GetDfsServersReq {
+    DfsClient client = 1;
+}
+
+// The message for DfsServer.
+message GetDfsServersRep {
+    oneof GetDfsServerUnion {
+        DfsServerList sl = 1;
+        Heartbeat     hb = 2;
+    }
+}
+
+// Discovery service definition.
+service DiscoveryService {
+    // GetDfsServers returns a list of DfsServer.
+    rpc GetDfsServers(GetDfsServersReq) returns (stream GetDfsServersRep) {}
+}
