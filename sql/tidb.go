@@ -29,7 +29,7 @@ const (
 )
 
 var (
-	NotFound = errors.New("file not found")
+	NotFound = errors.New("not found")
 )
 
 type File struct {
@@ -47,7 +47,7 @@ type File struct {
 	EntityType int8
 }
 
-// FMoperator implements interface FileMetadataDAO.
+// Foperator implements interface FileMetadataDAO.
 type FOperator struct {
 	db *sql.DB
 }
@@ -200,13 +200,15 @@ func (operator FOperator) RemoveFile(ctx context.Context, fid string) (bool, err
 
 // RemoveDupl removes the duplication, decrease it's ref,
 // if ref == 0, then remove the entity file and return true.
-func (operator FOperator) RemoveDupl(ctx context.Context, did string) (bool, error) {
+func (operator FOperator) RemoveDupl(ctx context.Context, did string) (bool, string, error) {
 	result := false
+	entity := ""
 
 	f, err := operator.LookupFileByDid(ctx, did)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
+	entity = f.FId
 
 	err = operator.Tx(func(tx *sql.Tx) error {
 		n, err := operator.removeDupl(ctx, tx, did)
@@ -222,7 +224,7 @@ func (operator FOperator) RemoveDupl(ctx context.Context, did string) (bool, err
 		return err
 	})
 
-	return result, err
+	return result, entity, err
 }
 
 func (operator FOperator) saveFile(ctx context.Context, tx *sql.Tx, fm *File) error {

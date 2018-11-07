@@ -15,6 +15,7 @@ go_library(
         "//dfs/meta:go_default_library",
         "//dfs/util:go_default_library",
         "//third-party-go/vendor/github.com/go-sql-driver/mysql:go_default_library",
+        "//third-party-go/vendor/github.com/golang/glog:go_default_library",
         "//third-party-go/vendor/gopkg.in/mgo.v2/bson:go_default_library",
     ],
 )
