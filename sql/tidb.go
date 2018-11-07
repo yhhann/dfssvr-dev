@@ -29,8 +29,7 @@ const (
 )
 
 var (
-	FileNotFoundError = errors.New("file not found")
-	ParameterError    = errors.New("parameter error")
+	NotFound = errors.New("file not found")
 )
 
 type File struct {
@@ -227,9 +226,6 @@ func (operator FOperator) RemoveDupl(ctx context.Context, did string) (bool, err
 }
 
 func (operator FOperator) saveFile(ctx context.Context, tx *sql.Tx, fm *File) error {
-	if fm.FId == "" {
-		return ParameterError
-	}
 	fm.RefCount = 1
 
 	stmt, err := tx.Prepare(f_insert)
@@ -413,6 +409,9 @@ func (operator FOperator) getFileAttrs(ctx context.Context, tx *sql.Tx, fid stri
 	for rows.Next() {
 		var k, v string
 		err = rows.Scan(&k, &v)
+		if err == sql.ErrNoRows {
+			return attrs, nil
+		}
 		if err != nil {
 			return attrs, err
 		}
@@ -438,6 +437,9 @@ func (operator FOperator) Tx(target func(*sql.Tx) error) error {
 	}()
 
 	err = target(tx)
+	if err == sql.ErrNoRows {
+		err = NotFound
+	}
 
 	return err
 }
