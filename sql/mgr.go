@@ -1,4 +1,4 @@
-package sql
+package db
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type DatabaseMgr struct {
 	conf    *DatabaseConf
 
 	current int
-	lock    sync.Mutex
+	lock    sync.RWMutex
 }
 
 type DatabaseConf struct {
@@ -31,6 +31,9 @@ func (mgr *DatabaseMgr) Init(conf *DatabaseConf) {
 	mgr.conf = conf
 	serverAddrs := strings.Split(conf.Addrs, ",")
 	mgr.servers = make(map[string]*sql.DB)
+
+	mgr.lock.Lock()
+	defer mgr.lock.Unlock()
 
 	for _, a := range serverAddrs {
 		dsn := conf.User + ":" + conf.Pass + "@tcp(" + a + ")/" + conf.DBname
@@ -50,8 +53,8 @@ func (mgr *DatabaseMgr) Init(conf *DatabaseConf) {
 }
 
 func (mgr *DatabaseMgr) Session(ctx context.Context) (*sql.DB, error) {
-	mgr.lock.Lock()
-	defer mgr.lock.Unlock()
+	mgr.lock.RLock()
+	defer mgr.lock.RUnlock()
 
 	if len(mgr.servers) <= 0 {
 		return nil, errors.New("no available session")
