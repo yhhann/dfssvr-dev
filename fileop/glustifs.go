@@ -114,6 +114,7 @@ func (h *GlustiHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
 	inf.Size = file.sdf.Size
 	file.info = &inf
 
+	glog.V(2).Infof("Succeeded to create file %s, from %s.", inf.Id, h.Name())
 	return file, nil
 }
 
@@ -167,6 +168,8 @@ func (h *GlustiHandler) Open(id string, domain int64) (DFSFile, error) {
 		Md5:    fm.Md5,
 		Biz:    fm.Biz,
 	}
+
+	glog.V(2).Infof("Succeeded to open file %s, from %s.", id, h.Name())
 	return f, nil
 }
 
@@ -187,7 +190,8 @@ func (h *GlustiHandler) Find(id string) (string, *DFSFileMeta, *transfer.FileInf
 	var chunksize int64 = 0
 	chunksize, err = strconv.ParseInt(f.ExtAttr["chunksize"], 10, 64)
 	if err != nil {
-		glog.V(4).Infof("Failed to parse chunk size %s, %v.", f.ExtAttr["chunksize"], err)
+		glog.V(4).Infof("Chunk size can't be parsed %s, %v.", f.ExtAttr["chunksize"], err)
+		chunksize = -1
 	}
 
 	meta := &DFSFileMeta{
@@ -212,7 +216,7 @@ func (h *GlustiHandler) Find(id string) (string, *DFSFileMeta, *transfer.FileInf
 		User:   userId,
 	}
 
-	glog.V(3).Infof("Succeeded to find file %s, return %s", id, f.Id)
+	glog.V(2).Infof("Succeeded to find file %s, entity %s, from %s.", id, f.Id, h.Name())
 
 	return f.Id, meta, info, nil
 }
@@ -229,6 +233,8 @@ func (h *GlustiHandler) Remove(id string, domain int64) (bool, *meta.File, error
 		glog.Warningf("Failed to remove file %s %d from %s, %v.", id, domain, h.Name(), err)
 		return false, nil, err
 	}
+
+	glog.V(2).Infof("Succeeded to remove file %s %d, from %s.", id, domain, h.Name())
 
 	// TODO(hanyh):
 	// assert entity should equals to f.Id
@@ -287,6 +293,8 @@ func (h *GlustiHandler) FindByMd5(md5 string, domain int64, size int64) (string,
 		return "", err
 	}
 
+	glog.V(2).Infof("Succeeded to find by md5 %s %d, from %s.", md5, domain, h.Name())
+
 	return file.Id, nil
 }
 
@@ -306,6 +314,7 @@ func (h *GlustiHandler) InitVolumeCB(host, name, base string) error {
 	h.Shard.VolName = name
 	h.Shard.VolBase = base
 
+	glog.V(2).Infof("Initial volume by callback %s %s %s", host, name, base)
 	return h.initVolume()
 }
 
@@ -416,6 +425,7 @@ func (f GlustiFile) Close() error {
 		}
 	}
 
+	glog.V(2).Infof("Succeeded to close file %s %d.", f.sdf.Id, f.sdf.Domain)
 	return nil
 }
 

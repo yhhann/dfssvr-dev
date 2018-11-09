@@ -20,12 +20,15 @@ type TeeHandler struct {
 func (h *TeeHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
 	tf := &TeeFile{}
 
-	f, err := h.major.Create(info)
+	var err error
+	tf.majorFile, err = h.major.Create(info)
 	if err != nil {
-		return nil, err
+		glog.Warningf("Failed to create file %v on major %s, %v.", info, h.Name(), err)
+		return tf, err
 	}
+	f := tf.majorFile
 
-	tf.majorFile = f
+	glog.V(2).Infof("Create file %v on major %s.", f.GetFileInfo().Id, h.Name())
 
 	if conf.IsMinorWriteOk(info.Domain) {
 		f, err := h.minor.CreateWithGivenId(f.GetFileInfo())
@@ -34,13 +37,13 @@ func (h *TeeHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
 				Name:  "create_failed",
 				Value: 1.0,
 			}
-			glog.Warningf("Failed to create file %v on minor, %s.", info, err)
+			glog.Warningf("Failed to create file %v on minor %s, %v.", info, h.Name(), err)
 		} else {
 			instrument.MinorFileCounter <- &instrument.Measurements{
 				Name:  "created",
 				Value: 1.0,
 			}
-			glog.V(3).Infof("Create file %v on minor %s.", f.GetFileInfo(), h.Name())
+			glog.V(2).Infof("Create file %v on minor %s.", f.GetFileInfo().Id, h.Name())
 		}
 
 		tf.minorFile = f
@@ -62,12 +65,13 @@ func (h *TeeHandler) Open(id string, domain int64) (DFSFile, error) {
 				Name:  "open_failed",
 				Value: 1.0,
 			}
+			glog.Warningf("Failed to open file %v on minor %s, %v.", tf.minorFile.GetFileInfo(), h.Name(), err)
 		} else {
 			instrument.MinorFileCounter <- &instrument.Measurements{
 				Name:  "opened",
 				Value: 1.0,
 			}
-			glog.V(3).Infof("Open file %v on minor %s.", tf.minorFile.GetFileInfo(), h.Name())
+			glog.V(2).Infof("Open file %v on minor %s.", tf.minorFile.GetFileInfo().Id, h.Name())
 
 			// How to deal with 'file not found'?
 			return tf, nil
@@ -76,9 +80,11 @@ func (h *TeeHandler) Open(id string, domain int64) (DFSFile, error) {
 
 	tf.majorFile, err = h.major.Open(id, domain)
 	if err != nil {
+		glog.Warningf("Failed to open file %v on major %s, %v.", tf.minorFile.GetFileInfo(), h.Name(), err)
 		return nil, err
 	}
 
+	glog.V(2).Infof("Open file %v on minor %s.", tf.minorFile.GetFileInfo().Id, h.Name())
 	return tf, nil
 }
 
@@ -96,13 +102,14 @@ func (h *TeeHandler) Duplicate(oid string, domain int64) (string, error) {
 				Name:  "duplicate_failed",
 				Value: 1.0,
 			}
+			glog.Warningf("Failed to duplicate file %s/%s on minor %s, %v.", did, oid, h.Name(), err)
 		} else {
 			instrument.MinorFileCounter <- &instrument.Measurements{
 				Name:  "duplicated",
 				Value: 1.0,
 			}
 
-			glog.V(3).Infof("Duplicate file %s on minor %s.", did, h.Name())
+			glog.V(2).Infof("Duplicate file %s/%s on minor %s.", did, oid, h.Name())
 		}
 	}
 
@@ -122,12 +129,13 @@ func (h *TeeHandler) Remove(id string, domain int64) (bool, *meta.File, error) {
 			Name:  "remove_failed",
 			Value: 1.0,
 		}
+		glog.Warningf("Failed to remove file %s on minor %s, %v.", id, h.Name(), err)
 	} else {
 		instrument.MinorFileCounter <- &instrument.Measurements{
 			Name:  "removed",
 			Value: 1.0,
 		}
-		glog.V(3).Infof("Remove file %s from minor %s.", id, h.Name())
+		glog.V(2).Infof("Remove file %s from minor %s.", id, h.Name())
 	}
 
 	return result, meta, err
@@ -139,6 +147,7 @@ func (h *TeeHandler) Remove(id string, domain int64) (bool, *meta.File, error) {
 func (h *TeeHandler) Find(fid string) (string, *DFSFileMeta, *transfer.FileInfo, error) {
 	id, m, info, err := h.minor.Find(fid)
 	if err == nil {
+		glog.V(2).Infof("Find file %s from minor %s.", fid, h.Name())
 		return id, m, info, err
 	}
 
@@ -258,6 +267,8 @@ func (f *TeeFile) Close() (err error) {
 			glog.Warningf("Failed to close minor file %s, %v.", f.GetFileInfo().Id, err)
 		}
 	}
+
+	glog.V(2).Infof("Close minor file %s.", f.GetFileInfo().Id)
 
 	if f.majorFile != nil {
 		err = f.majorFile.Close()
