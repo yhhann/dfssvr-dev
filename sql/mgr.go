@@ -1,42 +1,34 @@
-package db
+package sql
 
 import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"sync"
+	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/golang/glog"
 )
 
 type DatabaseMgr struct {
+	DSNs    []string
 	addrs   []string
-	servers map[string]*sql.DB
-	conf    *DatabaseConf
+	servers map[string]*FOperator
 
 	current int
 	lock    sync.RWMutex
 }
 
-type DatabaseConf struct {
-	User   string
-	Pass   string
-	Addrs  string
-	DBname string
-}
-
-func (mgr *DatabaseMgr) Init(conf *DatabaseConf) {
-	mgr.conf = conf
-	serverAddrs := strings.Split(conf.Addrs, ",")
-	mgr.servers = make(map[string]*sql.DB)
+func (mgr *DatabaseMgr) init(dsns []string) {
+	mgr.servers = make(map[string]*FOperator)
 
 	mgr.lock.Lock()
 	defer mgr.lock.Unlock()
 
-	for _, a := range serverAddrs {
-		dsn := conf.User + ":" + conf.Pass + "@tcp(" + a + ")/" + conf.DBname
+	for _, dsn := range dsns {
+		cfg, err := mysql.ParseDSN(dsn)
+		a := cfg.Addr
 		db, err := sql.Open("mysql", dsn)
 		if err != nil {
 			glog.Errorf("Failed to connect to node %s, %v", dsn, err)
@@ -47,12 +39,26 @@ func (mgr *DatabaseMgr) Init(conf *DatabaseConf) {
 			continue
 		}
 
-		mgr.servers[a] = db
+		mgr.servers[a] = NewFOperator(db)
 		mgr.addrs = append(mgr.addrs, a)
 	}
 }
 
-func (mgr *DatabaseMgr) Session(ctx context.Context) (*sql.DB, error) {
+func (mgr *DatabaseMgr) Session(ctx context.Context) *FOperator {
+	for {
+		op, err := mgr.session(ctx)
+		if err == nil {
+			return op
+		}
+
+		glog.Warningf("Waiting for db to be initialled, %v", err)
+		time.Sleep(time.Second)
+	}
+
+	return nil
+}
+
+func (mgr *DatabaseMgr) session(ctx context.Context) (*FOperator, error) {
 	mgr.lock.RLock()
 	defer mgr.lock.RUnlock()
 
@@ -67,15 +73,20 @@ func (mgr *DatabaseMgr) Session(ctx context.Context) (*sql.DB, error) {
 }
 
 func (mgr *DatabaseMgr) Close() {
-	for a, db := range mgr.servers {
-		err := db.Close()
+	for a, op := range mgr.servers {
+		err := op.Close()
 		if err != nil {
-			glog.Errorf("Close session %s error %v", a, err)
+			glog.Errorf("Failed to close session %s, error %v", a, err)
 		}
 	}
 }
 
 // NewDatabaseMgr returns a new database manager.
-func NewDatabaseMgr() *DatabaseMgr {
-	return &DatabaseMgr{}
+func NewDatabaseMgr(dsns []string) *DatabaseMgr {
+	mgr := &DatabaseMgr{
+		DSNs: dsns,
+	}
+	mgr.init(dsns)
+
+	return mgr
 }

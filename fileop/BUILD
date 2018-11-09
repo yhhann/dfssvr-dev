@@ -19,6 +19,7 @@ go_library(
         "//dfs/metadata:go_default_library",
         "//dfs/proto/transfer:go_default_library",
         "//dfs/recovery:go_default_library",
+        "//dfs/sql:go_default_library",
         "//dfs/util:go_default_library",
         "//seaweedfs-adaptor/weedfs:go_default_library",
         "//third-party-go/vendor/github.com/golang/glog:go_default_library",

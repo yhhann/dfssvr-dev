@@ -232,6 +232,12 @@ func (h *SeadraHandler) StartHealthCheckRoutine(interval time.Duration, timeout 
 	}()
 }
 
+// InitVolumeCB is a callback function invoked by major to initialize volume.
+func (h *SeadraHandler) InitVolumeCB(host, name, base string) error {
+	// leave it empty.
+	return nil
+}
+
 // NewSeadraHandler creates a SeadraHandler.
 func NewSeadraHandler(shd *metadata.Shard) (*SeadraHandler, error) {
 	handler := &SeadraHandler{

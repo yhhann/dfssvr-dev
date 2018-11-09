@@ -12,6 +12,7 @@ const (
 	Gridra          = 21             // GridFS + Cassandra
 	Glustra         = 22             // GlusterFS + Cassandra
 	Seadra          = 23             // SeaweedFS + Cassandra
+	Glusti          = 30             // GlusterFS + TiDB
 	MinorServer     = 10000          // Minor server.
 )
 

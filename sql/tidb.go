@@ -53,7 +53,7 @@ type FOperator struct {
 }
 
 // LookupFile returns a file metadata and attributes by it's fid.
-func (operator FOperator) LookupFile(ctx context.Context, fid string) (*File, error) {
+func (operator *FOperator) LookupFile(ctx context.Context, fid string) (*File, error) {
 	var f *File
 	err := operator.Tx(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(f_select)
@@ -87,7 +87,7 @@ func (operator FOperator) LookupFile(ctx context.Context, fid string) (*File, er
 }
 
 // LookupFileByDid returns a file metadata and attributes by duplicate id.
-func (operator FOperator) LookupFileByDid(ctx context.Context, did string) (*File, error) {
+func (operator *FOperator) LookupFileByDid(ctx context.Context, did string) (*File, error) {
 	var f *File
 	err := operator.Tx(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(f_sel_by_did)
@@ -122,7 +122,7 @@ func (operator FOperator) LookupFileByDid(ctx context.Context, did string) (*Fil
 }
 
 // LookupFileByMD5 returns file metadata without attributes by it's md5.
-func (operator FOperator) LookupFileByMD5(ctx context.Context, md5 string, domain int64) (*File, error) {
+func (operator *FOperator) LookupFileByMD5(ctx context.Context, md5 string, domain int64) (*File, error) {
 	var f *File
 	err := operator.Tx(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(f_sel_by_md5)
@@ -149,7 +149,7 @@ func (operator FOperator) LookupFileByMD5(ctx context.Context, md5 string, domai
 }
 
 // SaveFile saves file metadata and it's attributes if any.
-func (operator FOperator) SaveFile(ctx context.Context, fm *File) error {
+func (operator *FOperator) SaveFile(ctx context.Context, fm *File) error {
 	return operator.Tx(func(tx *sql.Tx) error {
 		err := operator.saveFile(ctx, tx, fm)
 		if err != nil {
@@ -165,7 +165,7 @@ func (operator FOperator) SaveFile(ctx context.Context, fm *File) error {
 }
 
 // DuplFile returns a reference for an entity file.
-func (operator FOperator) DuplFile(ctx context.Context, fid string, did string, createDate time.Time) error {
+func (operator *FOperator) DuplFile(ctx context.Context, fid string, did string, createDate time.Time) error {
 	return operator.Tx(func(tx *sql.Tx) error {
 		if err := operator.saveDupl(ctx, tx, fid, did, createDate); err != nil {
 			return err
@@ -180,14 +180,14 @@ func (operator FOperator) DuplFile(ctx context.Context, fid string, did string, 
 }
 
 // AddAttrs adds attributes for a file.
-func (operator FOperator) AddAttrs(ctx context.Context, fid string, attrs map[string]string) error {
+func (operator *FOperator) AddAttrs(ctx context.Context, fid string, attrs map[string]string) error {
 	return operator.Tx(func(tx *sql.Tx) error {
 		return operator.saveAttrs(ctx, tx, fid, attrs)
 	})
 }
 
 // RemoveFile removes a file with attributes if any.
-func (operator FOperator) RemoveFile(ctx context.Context, fid string) (bool, error) {
+func (operator *FOperator) RemoveFile(ctx context.Context, fid string) (bool, error) {
 	result := false
 	err := operator.Tx(func(tx *sql.Tx) error {
 		var err error
@@ -200,7 +200,7 @@ func (operator FOperator) RemoveFile(ctx context.Context, fid string) (bool, err
 
 // RemoveDupl removes the duplication, decrease it's ref,
 // if ref == 0, then remove the entity file and return true.
-func (operator FOperator) RemoveDupl(ctx context.Context, did string) (bool, string, error) {
+func (operator *FOperator) RemoveDupl(ctx context.Context, did string) (bool, string, error) {
 	result := false
 	entity := ""
 
@@ -227,7 +227,7 @@ func (operator FOperator) RemoveDupl(ctx context.Context, did string) (bool, str
 	return result, entity, err
 }
 
-func (operator FOperator) saveFile(ctx context.Context, tx *sql.Tx, fm *File) error {
+func (operator *FOperator) saveFile(ctx context.Context, tx *sql.Tx, fm *File) error {
 	fm.RefCount = 1
 
 	stmt, err := tx.Prepare(f_insert)
@@ -245,7 +245,7 @@ func (operator FOperator) saveFile(ctx context.Context, tx *sql.Tx, fm *File) er
 }
 
 // saveAttrs saves attributes of file.
-func (operator FOperator) saveAttrs(ctx context.Context, tx *sql.Tx, fid string, attrs map[string]string) error {
+func (operator *FOperator) saveAttrs(ctx context.Context, tx *sql.Tx, fid string, attrs map[string]string) error {
 	if len(attrs) == 0 {
 		return nil
 	}
@@ -266,7 +266,7 @@ func (operator FOperator) saveAttrs(ctx context.Context, tx *sql.Tx, fid string,
 	return nil
 }
 
-func (operator FOperator) saveDupl(ctx context.Context, tx *sql.Tx, fid string, did string, createDate time.Time) error {
+func (operator *FOperator) saveDupl(ctx context.Context, tx *sql.Tx, fid string, did string, createDate time.Time) error {
 	stmt, err := tx.Prepare(d_insert)
 	if err != nil {
 		return err
@@ -281,7 +281,7 @@ func (operator FOperator) saveDupl(ctx context.Context, tx *sql.Tx, fid string, 
 	return nil
 }
 
-func (operator FOperator) refInc(ctx context.Context, tx *sql.Tx, fid string) error {
+func (operator *FOperator) refInc(ctx context.Context, tx *sql.Tx, fid string) error {
 	stmt1, err := tx.Prepare(f_ref_inc_one)
 	if err != nil {
 		return err
@@ -296,7 +296,7 @@ func (operator FOperator) refInc(ctx context.Context, tx *sql.Tx, fid string) er
 	return nil
 }
 
-func (operator FOperator) refDec(ctx context.Context, tx *sql.Tx, fid string) error {
+func (operator *FOperator) refDec(ctx context.Context, tx *sql.Tx, fid string) error {
 	stmt1, err := tx.Prepare(f_ref_dec_one)
 	if err != nil {
 		return err
@@ -311,7 +311,7 @@ func (operator FOperator) refDec(ctx context.Context, tx *sql.Tx, fid string) er
 	return nil
 }
 
-func (operator FOperator) getRef(ctx context.Context, tx *sql.Tx, fid string) (int, error) {
+func (operator *FOperator) getRef(ctx context.Context, tx *sql.Tx, fid string) (int, error) {
 	stmt1, err := tx.Prepare("SELECT refcnt FROM file where id = ?")
 	if err != nil {
 		return -1, err
@@ -327,7 +327,7 @@ func (operator FOperator) getRef(ctx context.Context, tx *sql.Tx, fid string) (i
 	return refcnt, nil
 }
 
-func (operator FOperator) removeFileAndAttrs(ctx context.Context, tx *sql.Tx, fid string) error {
+func (operator *FOperator) removeFileAndAttrs(ctx context.Context, tx *sql.Tx, fid string) error {
 	stmt, err := tx.Prepare(f_delete)
 	if err != nil {
 		return err
@@ -353,7 +353,7 @@ func (operator FOperator) removeFileAndAttrs(ctx context.Context, tx *sql.Tx, fi
 	return nil
 }
 
-func (operator FOperator) removeDupl(ctx context.Context, tx *sql.Tx, did string) (int64, error) {
+func (operator *FOperator) removeDupl(ctx context.Context, tx *sql.Tx, did string) (int64, error) {
 	stmt, err := tx.Prepare(d_delete_bydid)
 	if err != nil {
 		return 0, err
@@ -372,7 +372,7 @@ func (operator FOperator) removeDupl(ctx context.Context, tx *sql.Tx, did string
 	return n, nil
 }
 
-func (operator FOperator) removeFile(ctx context.Context, tx *sql.Tx, fid string) (bool, error) {
+func (operator *FOperator) removeFile(ctx context.Context, tx *sql.Tx, fid string) (bool, error) {
 	if err := operator.refDec(ctx, tx, fid); err != nil {
 		return false, err
 	}
@@ -393,7 +393,7 @@ func (operator FOperator) removeFile(ctx context.Context, tx *sql.Tx, fid string
 	return true, nil
 }
 
-func (operator FOperator) getFileAttrs(ctx context.Context, tx *sql.Tx, fid string) (map[string]string, error) {
+func (operator *FOperator) getFileAttrs(ctx context.Context, tx *sql.Tx, fid string) (map[string]string, error) {
 	attrs := make(map[string]string)
 
 	stmt1, err := tx.Prepare(a_select)
@@ -424,7 +424,11 @@ func (operator FOperator) getFileAttrs(ctx context.Context, tx *sql.Tx, fid stri
 	return attrs, nil
 }
 
-func (operator FOperator) Tx(target func(*sql.Tx) error) error {
+func (operator *FOperator) Close() error {
+	return operator.db.Close()
+}
+
+func (operator *FOperator) Tx(target func(*sql.Tx) error) error {
 	tx, err := operator.db.Begin()
 	if err != nil {
 		return err
@@ -446,8 +450,8 @@ func (operator FOperator) Tx(target func(*sql.Tx) error) error {
 	return err
 }
 
-func NewFOperator(db *sql.DB) (*FOperator, error) {
+func NewFOperator(db *sql.DB) *FOperator {
 	return &FOperator{
 		db: db,
-	}, nil
+	}
 }

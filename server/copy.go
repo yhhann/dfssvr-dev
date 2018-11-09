@@ -86,6 +86,7 @@ func (s *DFSServer) copyBiz(c interface{}, r interface{}, args []interface{}) (i
 	}
 
 	copiedInf := *rf.GetFileInfo()
+	copiedInf.Id = ""
 	copiedInf.Domain = req.DstDomain
 	copiedInf.User = req.DstUid
 	copiedInf.Biz = req.DstBiz

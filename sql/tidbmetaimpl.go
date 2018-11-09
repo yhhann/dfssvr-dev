@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	//	"github.com/golang/glog"
 	"gopkg.in/mgo.v2/bson"
 
 	"jingoal.com/dfs/meta"
@@ -12,12 +13,12 @@ import (
 )
 
 type TiDBMetaImpl struct {
-	FOperator
+	*DatabaseMgr
 }
 
-func NewTiDBMetaImpl(op FOperator) meta.FileMetaOp {
+func NewTiDBMetaImpl(mgr *DatabaseMgr) meta.FileMetaOp {
 	return &TiDBMetaImpl{
-		FOperator: op,
+		DatabaseMgr: mgr,
 	}
 }
 
@@ -30,8 +31,10 @@ func (impl *TiDBMetaImpl) Save(f *meta.File) error {
 		return errors.New("File type unknown.")
 	}
 
+	ctx := context.Background()
+
 	tf := ToTiDBFile(f)
-	err := impl.SaveFile(context.Background(), tf)
+	err := impl.Session(ctx).SaveFile(ctx, tf)
 	if err != nil {
 		return err
 	}
@@ -45,8 +48,10 @@ func (impl *TiDBMetaImpl) Find(fid string) (*meta.File, error) {
 		return nil, InputArgsNull
 	}
 
+	ctx := context.Background()
+
 	if util.IsDuplId(fid) {
-		tf, err := impl.LookupFileByDid(context.Background(), util.GetRealId(fid))
+		tf, err := impl.Session(ctx).LookupFileByDid(ctx, util.GetRealId(fid))
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +59,7 @@ func (impl *TiDBMetaImpl) Find(fid string) (*meta.File, error) {
 		return ToMetaFile(tf), nil
 	}
 
-	tf, err := impl.LookupFile(context.Background(), fid)
+	tf, err := impl.Session(ctx).LookupFile(ctx, fid)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +73,9 @@ func (impl *TiDBMetaImpl) FindByMd5(md5 string, domain int64) (*meta.File, error
 		return nil, InputArgsNull
 	}
 
-	tf, err := impl.LookupFileByMD5(context.Background(), md5, domain)
+	ctx := context.Background()
+
+	tf, err := impl.Session(ctx).LookupFileByMD5(ctx, md5, domain)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +100,7 @@ func (impl *TiDBMetaImpl) DuplicateWithId(fid string, did string, createDate tim
 	ctx := context.Background()
 
 	if util.IsDuplId(fid) {
-		original, err := impl.LookupFileByDid(ctx, util.GetRealId(fid))
+		original, err := impl.Session(ctx).LookupFileByDid(ctx, util.GetRealId(fid))
 		if err != nil {
 			return "", err
 		}
@@ -101,7 +108,7 @@ func (impl *TiDBMetaImpl) DuplicateWithId(fid string, did string, createDate tim
 		fid = original.FId
 	}
 
-	if err := impl.DuplFile(ctx, fid, did, createDate); err != nil {
+	if err := impl.Session(ctx).DuplFile(ctx, fid, util.GetRealId(did), createDate); err != nil {
 		return "", err
 	}
 
@@ -117,10 +124,10 @@ func (impl *TiDBMetaImpl) Delete(fid string) (bool, string, error) {
 	ctx := context.Background()
 
 	if util.IsDuplId(fid) {
-		return impl.RemoveDupl(ctx, fid)
+		return impl.Session(ctx).RemoveDupl(ctx, util.GetRealId(fid))
 	}
 
-	result, err := impl.RemoveFile(ctx, fid)
+	result, err := impl.Session(ctx).RemoveFile(ctx, fid)
 	if err != nil {
 		return false, "", err
 	}

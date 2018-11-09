@@ -116,10 +116,6 @@ func (h *TeeHandler) Remove(id string, domain int64) (bool, *meta.File, error) {
 		return result, meta, err
 	}
 
-	if rid, _, _, err := h.minor.Find(id); len(rid) == 0 && err != nil {
-		return result, meta, err
-	}
-
 	_, _, err = h.minor.Remove(id, domain)
 	if err != nil {
 		instrument.MinorFileCounter <- &instrument.Measurements{

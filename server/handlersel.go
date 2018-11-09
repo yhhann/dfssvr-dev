@@ -192,14 +192,21 @@ func (hs *HandlerSelector) addHandler(shard *metadata.Shard) (err error) {
 		return
 	}
 
+	if hs.minorHandler != nil {
+		if shard.ShdType == metadata.Glustergo {
+			if err = hs.minorHandler.InitVolumeCB(shard.VolHost, shard.VolName, shard.VolBase); err != nil {
+				glog.Info("Failed to initialize volume for handler %s", hs.minorHandler.Name())
+				return
+			}
+
+			handler = fileop.NewTeeHandler(handler, hs.minorHandler)
+			glog.Infof("Succeeded to attach handler '%s' with minor '%s'.", handler.Name(), hs.minorHandler.Name())
+		}
+	}
+
 	if hs.backStoreShard != nil {
 		handler = fileop.NewBackStoreHandler(handler, hs.backStoreShard, hs.dfsServer.cacheOp)
 		glog.Infof("Succeeded to attach handler '%s' with bs '%s'.", handler.Name(), hs.backStoreShard.Name)
-	}
-
-	if hs.minorHandler != nil {
-		handler = fileop.NewTeeHandler(handler, hs.minorHandler)
-		glog.Infof("Succeeded to attach handler '%s' with minor '%s'.", handler.Name(), hs.minorHandler.Name())
 	}
 
 	if sh, ok := hs.getShardHandler(handler.Name()); ok {
@@ -607,6 +614,8 @@ func (hs *HandlerSelector) createMinorHandler(shard *metadata.Shard) (handler fi
 	shd.ShdType -= metadata.MinorServer
 
 	switch shd.ShdType {
+	case metadata.Glusti:
+		handler, err = fileop.NewGlustiHandler(&shd, filepath.Join(*logDir, shd.Name))
 	case metadata.Glustra:
 		handler, err = fileop.NewGlustraHandler(&shd, filepath.Join(*logDir, shd.Name))
 	case metadata.Seadra:

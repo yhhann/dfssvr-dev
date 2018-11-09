@@ -84,6 +84,9 @@ type DFSFileMinorHandler interface {
 
 	// Duplicate duplicates an entry with the given id.
 	DuplicateWithGivenId(primaryId string, dupId string) (string, error)
+
+	// InitVolumeCB is a callback function invoked by major to initialize volume.
+	InitVolumeCB(host, name, base string) error
 }
 
 func healthStatus2String(status int) string {

@@ -3,43 +3,46 @@ package fileop
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"hash"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/kshlm/gogfapi/gfapi"
 	"gopkg.in/mgo.v2/bson"
 
-	dra "jingoal.com/dfs/cassandra"
 	"jingoal.com/dfs/meta"
 	"jingoal.com/dfs/metadata"
 	"jingoal.com/dfs/proto/transfer"
+	"jingoal.com/dfs/sql"
 	"jingoal.com/dfs/util"
 )
 
-// GlustraHandler implements DFSFileHandler.
-type GlustraHandler struct {
+var (
+	glustiTest = flag.Bool("glusti-test", true, "test for glusti")
+)
+
+// GlustiHandler implements DFSFileHandler.
+type GlustiHandler struct {
 	*metadata.Shard
+
+	tiop meta.FileMetaOp
+
 	*gfapi.Volume
-
-	draOp  *dra.DraOpImpl
-	duplfs meta.FileMetaOp
-
 	VolLog string // Log file name of gluster volume
 }
 
 // Name returns handler's name.
-func (h *GlustraHandler) Name() string {
+func (h *GlustiHandler) Name() string {
 	return h.Shard.Name
 }
 
-func (h *GlustraHandler) initLogDir() error {
+func (h *GlustiHandler) initLogDir() error {
 	logDir := filepath.Dir(h.VolLog)
 
 	_, err := os.Stat(logDir)
@@ -54,7 +57,7 @@ func (h *GlustraHandler) initLogDir() error {
 }
 
 // initVolume initializes gluster volume.
-func (h *GlustraHandler) initVolume() error {
+func (h *GlustiHandler) initVolume() error {
 	h.Volume = new(gfapi.Volume)
 
 	if ret := h.Init(h.VolHost, h.VolName); ret != 0 {
@@ -76,25 +79,20 @@ func (h *GlustraHandler) initVolume() error {
 }
 
 // Close releases resources.
-func (h *GlustraHandler) Close() error {
+func (h *GlustiHandler) Close() error {
 	h.Unmount()
 	return nil // For compatible with Unmount returns.
 }
 
 // Create creates a DFSFile for write.
-func (h *GlustraHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
+func (h *GlustiHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
 	oid := bson.NewObjectId()
 	if bson.IsObjectIdHex(info.Id) {
 		oid = bson.ObjectIdHex(info.Id)
 	}
 
 	filePath := util.GetFilePath(h.VolBase, info.Domain, oid.Hex(), h.PathVersion, h.PathDigit)
-	dir := filepath.Dir(filePath)
-	if err := h.Volume.MkdirAll(dir, 0755); err != nil && !os.IsExist(err) {
-		return nil, err
-	}
-
-	file, err := h.createGlustraFile(filePath)
+	file, err := h.createGlustiFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -119,13 +117,27 @@ func (h *GlustraHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
 	return file, nil
 }
 
-func (h *GlustraHandler) createGlustraFile(name string) (*GlustraFile, error) {
+func (h *GlustiHandler) createGlustiFile(name string) (*GlustiFile, error) {
+	if *glustiTest {
+		return &GlustiFile{
+			glf:     nil,
+			md5:     md5.New(),
+			mode:    FileModeWrite,
+			handler: h,
+		}, nil
+	}
+
+	dir := filepath.Dir(name)
+	if err := h.Volume.MkdirAll(dir, 0755); err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+
 	f, err := h.Volume.Create(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &GlustraFile{
+	return &GlustiFile{
 		glf:     f,
 		md5:     md5.New(),
 		mode:    FileModeWrite,
@@ -134,40 +146,40 @@ func (h *GlustraHandler) createGlustraFile(name string) (*GlustraFile, error) {
 }
 
 // Open opens a file for read.
-func (h *GlustraHandler) Open(id string, domain int64) (DFSFile, error) {
-	f, err := h.duplfs.Find(id)
+func (h *GlustiHandler) Open(id string, domain int64) (DFSFile, error) {
+	fm, err := h.tiop.Find(id)
 	if err != nil {
 		return nil, err
 	}
 
-	filePath := util.GetFilePath(h.VolBase, f.Domain, f.Id, h.PathVersion, h.PathDigit)
-	result, err := h.openGlustraFile(filePath)
+	filePath := util.GetFilePath(h.VolBase, fm.Domain, fm.Id, h.PathVersion, h.PathDigit)
+	f, err := h.openGlustiFile(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	result.sdf = f
-	result.info = &transfer.FileInfo{
-		Id:     f.Id,
-		Domain: f.Domain,
-		Name:   f.Name,
-		Size:   f.Size,
-		Md5:    f.Md5,
-		Biz:    f.Biz,
+	f.sdf = fm
+	f.info = &transfer.FileInfo{
+		Id:     fm.Id,
+		Domain: fm.Domain,
+		Name:   fm.Name,
+		Size:   fm.Size,
+		Md5:    fm.Md5,
+		Biz:    fm.Biz,
 	}
-	return result, nil
+	return f, nil
 }
 
 // Duplicate duplicates an entry for a file.
-func (h *GlustraHandler) Duplicate(fid string, domain int64) (string, error) {
-	return h.duplfs.DuplicateWithId(fid, "", time.Time{})
+func (h *GlustiHandler) Duplicate(fid string, domain int64) (string, error) {
+	return h.tiop.DuplicateWithId(fid, "", time.Time{})
 }
 
 // Find finds a file. If the file not exists, return empty string.
 // If the file exists and is a duplication, return its primitive file ID.
 // If the file exists, return its file ID.
-func (h *GlustraHandler) Find(id string) (string, *DFSFileMeta, *transfer.FileInfo, error) {
-	f, err := h.duplfs.Find(id)
+func (h *GlustiHandler) Find(id string) (string, *DFSFileMeta, *transfer.FileInfo, error) {
+	f, err := h.tiop.Find(id)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -206,37 +218,38 @@ func (h *GlustraHandler) Find(id string) (string, *DFSFileMeta, *transfer.FileIn
 }
 
 // Remove deletes file by its id and domain.
-func (h *GlustraHandler) Remove(id string, domain int64) (bool, *meta.File, error) {
-	result, entityId, err := h.duplfs.Delete(id)
+func (h *GlustiHandler) Remove(id string, domain int64) (bool, *meta.File, error) {
+	f, err := h.tiop.Find(id)
 	if err != nil {
-		glog.Warningf("Failed to remove file %s %d from %s, %s.", id, domain, h.Name(), err)
 		return false, nil, err
 	}
 
-	var m *meta.File
-	if result {
-		m, err = h.duplfs.Find(entityId)
-		if err != nil {
-			return false, nil, err
-		}
-		h.draOp.RemoveFile(entityId)
+	result, entityId, err := h.tiop.Delete(id)
+	if err != nil {
+		glog.Warningf("Failed to remove file %s %d from %s, %v.", id, domain, h.Name(), err)
+		return false, nil, err
+	}
 
+	// TODO(hanyh):
+	// assert entity should equals to f.Id
+
+	if result && !*glustiTest {
 		filePath := util.GetFilePath(h.VolBase, domain, entityId, h.PathVersion, h.PathDigit)
 		if err := h.Unlink(filePath); err != nil {
 			glog.Warningf("Failed to remove file %s %d from %s, %s.", id, domain, h.Name(), err)
 		}
 	}
 
-	return result, m, nil
+	return result, f, nil
 }
 
-func (h *GlustraHandler) openGlustraFile(name string) (*GlustraFile, error) {
+func (h *GlustiHandler) openGlustiFile(name string) (*GlustiFile, error) {
 	f, err := h.Volume.Open(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &GlustraFile{
+	return &GlustiFile{
 		glf:     f,
 		mode:    FileModeRead,
 		handler: h,
@@ -244,11 +257,8 @@ func (h *GlustraHandler) openGlustraFile(name string) (*GlustraFile, error) {
 }
 
 // HealthStatus returns the status of node health.
-func (h *GlustraHandler) HealthStatus() int {
-	// check cassandra
-	if err := h.draOp.HealthCheck(transfer.NodeName); err != nil {
-		return MetaNotHealthy
-	}
+func (h *GlustiHandler) HealthStatus() int {
+	// metadata storage ignored
 
 	magicDirPath := filepath.Join(h.VolBase, "health", transfer.ServerId)
 	if err := h.Volume.MkdirAll(magicDirPath, 0755); err != nil && os.IsExist(err) {
@@ -271,8 +281,8 @@ func (h *GlustraHandler) HealthStatus() int {
 }
 
 // FindByMd5 finds a file by its md5.
-func (h *GlustraHandler) FindByMd5(md5 string, domain int64, size int64) (string, error) {
-	file, err := h.duplfs.FindByMd5(md5, domain) // ignore size
+func (h *GlustiHandler) FindByMd5(md5 string, domain int64, size int64) (string, error) {
+	file, err := h.tiop.FindByMd5(md5, domain) // ignore size
 	if err != nil {
 		return "", err
 	}
@@ -281,62 +291,70 @@ func (h *GlustraHandler) FindByMd5(md5 string, domain int64, size int64) (string
 }
 
 // Create creates a DFSFile with the given id.
-func (h *GlustraHandler) CreateWithGivenId(info *transfer.FileInfo) (DFSFile, error) {
+func (h *GlustiHandler) CreateWithGivenId(info *transfer.FileInfo) (DFSFile, error) {
 	return h.Create(info)
 }
 
 // Duplicate duplicates an entry with the given id.
-func (h *GlustraHandler) DuplicateWithGivenId(primaryId string, dupId string) (string, error) {
-	return h.duplfs.DuplicateWithId(primaryId, dupId, time.Time{})
+func (h *GlustiHandler) DuplicateWithGivenId(primaryId string, dupId string) (string, error) {
+	return h.tiop.DuplicateWithId(primaryId, dupId, time.Time{})
 }
 
 // InitVolumeCB is a callback function invoked by major to initialize volume.
-func (h *GlustraHandler) InitVolumeCB(host, name, base string) error {
-	// leave it empty
-	return nil
+func (h *GlustiHandler) InitVolumeCB(host, name, base string) error {
+	h.Shard.VolHost = host
+	h.Shard.VolName = name
+	h.Shard.VolBase = base
+
+	return h.initVolume()
 }
 
-// NewGlustraHandler creates a GlustraHandler.
-func NewGlustraHandler(si *metadata.Shard, volLog string) (*GlustraHandler, error) {
-	handler := &GlustraHandler{
+// NewGlustiHandler creates a GlustiHandler.
+func NewGlustiHandler(si *metadata.Shard, volLog string) (*GlustiHandler, error) {
+	handler := &GlustiHandler{
 		Shard:  si,
 		VolLog: volLog,
 	}
 
-	if err := handler.initVolume(); err != nil {
-		return nil, err
+	if !*glustiTest {
+		if err := handler.initVolume(); err != nil {
+			return nil, err
+		}
 	}
 
-	if si.ShdType != metadata.Glustra {
+	if si.ShdType != metadata.Glusti {
 		return nil, fmt.Errorf("invalid shard type %d.", si.ShdType)
 	}
 
-	seeds := strings.Split(si.Uri, ",")
-	handler.draOp = dra.NewDraOpImpl(seeds, dra.ParseCqlOptions(si.Attr)...)
+	dsns, err := sql.ConvertDSN(si.Uri)
+	if err != nil {
+		return nil, err
+	}
 
-	handler.duplfs = dra.NewDuplDra(handler.draOp)
+	mgr := sql.NewDatabaseMgr(dsns)
+	handler.tiop = sql.NewTiDBMetaImpl(mgr)
 
 	return handler, nil
 }
 
-// GlustraFile implements DFSFile
-type GlustraFile struct {
+// GlustiFile implements DFSFile
+type GlustiFile struct {
 	info    *transfer.FileInfo
 	glf     *gfapi.File // Gluster file
 	sdf     *meta.File
 	md5     hash.Hash
 	mode    dfsFileMode
-	handler *GlustraHandler
+	handler *GlustiHandler
 }
 
 // GetFileInfo returns file meta info.
-func (f GlustraFile) GetFileInfo() *transfer.FileInfo {
+func (f GlustiFile) GetFileInfo() *transfer.FileInfo {
 	return f.info
 }
 
 // Read reads atmost len(p) bytes into p.
 // Returns number of bytes read and an error if any.
-func (f GlustraFile) Read(p []byte) (int, error) {
+func (f GlustiFile) Read(p []byte) (int, error) {
 	nr, er := f.glf.Read(p)
 	// When reached EOF, glf returns nr=0 other than er=io.EOF, fix it.
 	if nr <= 0 {
@@ -347,15 +365,21 @@ func (f GlustraFile) Read(p []byte) (int, error) {
 
 // Write writes len(p) bytes to the file.
 // Returns number of bytes written and an error if any.
-func (f GlustraFile) Write(p []byte) (int, error) {
-	// If len(p) is zero, glf.Write() will panic.
-	if len(p) == 0 { // fix bug of gfapi.
-		return 0, nil
-	}
+func (f GlustiFile) Write(p []byte) (int, error) {
+	n := 0
+	if f.hasEntity() {
+		// If len(p) is zero, glf.Write() will panic.
+		if len(p) == 0 { // fix bug of gfapi.
+			return 0, nil
+		}
 
-	n, err := f.glf.Write(p)
-	if err != nil {
-		return 0, err
+		var err error
+		n, err = f.glf.Write(p)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		n = len(p)
 	}
 
 	f.md5.Write(p)
@@ -365,21 +389,27 @@ func (f GlustraFile) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// Close closes an opened GlustraFile.
-func (f GlustraFile) Close() error {
-	if err := f.glf.Close(); err != nil {
-		return err
+// Close closes an opened GlustiFile.
+func (f GlustiFile) Close() error {
+	if f.hasEntity() {
+		if err := f.glf.Close(); err != nil {
+			return err
+		}
 	}
 
 	if f.mode == FileModeWrite {
 		f.sdf.UploadDate = time.Now()
 		f.sdf.Md5 = hex.EncodeToString(f.md5.Sum(nil))
-		if err := f.handler.duplfs.Save(f.sdf); err != nil {
-			h := f.handler
-			inf := f.info
-			filePath := util.GetFilePath(h.VolBase, inf.Domain, inf.Id, h.PathVersion, h.PathDigit)
-			if err := h.Unlink(filePath); err != nil {
-				glog.Warningf("Failed to remove file without meta, %s %s %d from %s", inf.Id, inf.Name, inf.Domain, filePath)
+		if err := f.handler.tiop.Save(f.sdf); err != nil {
+			glog.Warningf("Failed to save metadata to tidb, %v", err)
+
+			if f.hasEntity() {
+				h := f.handler
+				inf := f.info
+				filePath := util.GetFilePath(h.VolBase, inf.Domain, inf.Id, h.PathVersion, h.PathDigit)
+				if err := h.Unlink(filePath); err != nil {
+					glog.Warningf("Failed to remove file without meta, %s %s %d from %s", inf.Id, inf.Name, inf.Domain, filePath)
+				}
 			}
 
 			return err
@@ -390,36 +420,15 @@ func (f GlustraFile) Close() error {
 }
 
 // updateFileMeta updates file dfs meta.
-func (f GlustraFile) updateFileMeta(m map[string]interface{}) {
+func (f GlustiFile) updateFileMeta(m map[string]interface{}) {
 	f.sdf.ExtAttr = make(map[string]string)
 	for k, v := range m {
 		f.sdf.ExtAttr[k] = toString(v)
 	}
 }
 
-func toString(x interface{}) string {
-	switch x := x.(type) {
-	case nil:
-		return "NULL"
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		return fmt.Sprintf("%d", x)
-	case float32, float64:
-		return fmt.Sprintf("%g", x)
-	case bool:
-		if x {
-			return "TRUE"
-		}
-		return "FALSE"
-	case string:
-		return x
-	default:
-		glog.Warningf("unexpected type %T: %v", x, x)
-		return ""
-	}
-}
-
 // getFileMeta returns file dfs meta.
-func (f GlustraFile) getFileMeta() *DFSFileMeta {
+func (f GlustiFile) getFileMeta() *DFSFileMeta {
 	ck, err := strconv.ParseInt(f.sdf.ExtAttr[MetaKey_Chunksize], 10, 64)
 	if err != nil {
 		glog.Warningf("Failed to parse chunk size, %s", f.sdf.ExtAttr[MetaKey_Chunksize])
@@ -433,6 +442,6 @@ func (f GlustraFile) getFileMeta() *DFSFileMeta {
 }
 
 // hasEntity returns if the file has entity.
-func (f GlustraFile) hasEntity() bool {
+func (f GlustiFile) hasEntity() bool {
 	return f.glf != nil
 }
