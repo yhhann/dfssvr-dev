@@ -7,6 +7,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+
+	"jingoal.com/dfs/meta"
 )
 
 const (
@@ -444,7 +446,7 @@ func (operator *FOperator) Tx(target func(*sql.Tx) error) error {
 
 	err = target(tx)
 	if err == sql.ErrNoRows {
-		err = NotFound
+		err = meta.FileNotFound
 	}
 
 	return err

@@ -118,27 +118,31 @@ func (h *TeeHandler) Duplicate(oid string, domain int64) (string, error) {
 
 // Remove deletes a file by its id.
 func (h *TeeHandler) Remove(id string, domain int64) (bool, *meta.File, error) {
-	result, meta, err := h.major.Remove(id, domain)
+	result, metadata, err := h.major.Remove(id, domain)
 	if err != nil {
-		return result, meta, err
+		return result, metadata, err
 	}
 
 	_, _, err = h.minor.Remove(id, domain)
+	if err == meta.FileNotFound {
+		glog.V(2).Infof("Remove file %s from minor %s, %v", id, h.Name(), err)
+		return result, metadata, nil
+	}
 	if err != nil {
 		instrument.MinorFileCounter <- &instrument.Measurements{
 			Name:  "remove_failed",
 			Value: 1.0,
 		}
 		glog.Warningf("Failed to remove file %s on minor %s, %v.", id, h.Name(), err)
-	} else {
-		instrument.MinorFileCounter <- &instrument.Measurements{
-			Name:  "removed",
-			Value: 1.0,
-		}
-		glog.V(2).Infof("Remove file %s from minor %s.", id, h.Name())
+		return result, metadata, err
 	}
 
-	return result, meta, err
+	instrument.MinorFileCounter <- &instrument.Measurements{
+		Name:  "removed",
+		Value: 1.0,
+	}
+	glog.V(2).Infof("Remove file %s from minor %s.", id, h.Name())
+	return result, metadata, nil
 }
 
 // Find finds a file, if the file not exists, return empty string.
@@ -157,7 +161,10 @@ func (h *TeeHandler) Find(fid string) (string, *DFSFileMeta, *transfer.FileInfo,
 // FindByMd5 finds a file by its md5.
 func (h *TeeHandler) FindByMd5(md5 string, domain int64, size int64) (string, error) {
 	if conf.IsMinorReadOk(domain) {
-		return h.minor.FindByMd5(md5, domain, size)
+		fid, err := h.minor.FindByMd5(md5, domain, size)
+		if err == nil {
+			return fid, nil
+		}
 	}
 
 	return h.major.FindByMd5(md5, domain, size)
@@ -187,6 +194,10 @@ func (h *TeeHandler) Close() (err error) {
 	}
 
 	return err
+}
+
+func (h *TeeHandler) GetMajor() DFSFileHandler {
+	return h.major
 }
 
 func NewTeeHandler(majorHandler DFSFileHandler, minorHandler DFSFileMinorHandler) *TeeHandler {

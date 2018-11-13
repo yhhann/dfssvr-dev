@@ -443,19 +443,27 @@ func (hs *HandlerSelector) startCachedFileRecoveryRoutine() {
 					for iter.Next(&cachelog) {
 						handler, err := hs.getDFSFileHandlerForWrite(cachelog.Domain)
 						if err != nil {
-							glog.Warningf("Failed to get file handler for %s", cachelog)
+							glog.Warningf("Failed to get file handler for %s", cachelog.String())
 							continue
 						}
 
 						backstoreHandler, ok := interface{}(*handler).(*fileop.BackStoreHandler)
 						if !ok {
-							glog.Warningf("Not a BackStoreHandler%T, %s", *handler, cachelog)
+							glog.Warningf("Not a BackStoreHandler%T, %s", *handler, cachelog.String())
 							continue
 						}
 						glusterHandler, ok := interface{}((*backstoreHandler).DFSFileHandler).(*fileop.GlusterHandler)
 						if !ok {
-							glog.Warningf("Not a GlusterHandler %T, %s", (*backstoreHandler).DFSFileHandler, cachelog)
-							continue
+							teeHandler, ok := interface{}((*backstoreHandler).DFSFileHandler).(*fileop.TeeHandler)
+							if !ok {
+								glog.Warningf("Not a TeeHandler %T, %s", (*backstoreHandler).DFSFileHandler, cachelog.String())
+								continue
+							}
+							glusterHandler, ok = interface{}((*teeHandler).GetMajor()).(*fileop.GlusterHandler)
+							if !ok {
+								glog.Warningf("Not a GlusterHandler %T, %s", (*teeHandler).GetMajor(), cachelog.String())
+								continue
+							}
 						}
 
 						copyCachedFile(glusterHandler, hs.backStoreShard.MasterUri, cacheOp, &cachelog)
