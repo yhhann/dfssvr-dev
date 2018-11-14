@@ -41,10 +41,8 @@ func (bsh *BackStoreHandler) Create(info *transfer.FileInfo) (DFSFile, error) {
 	if reErr, ok := err.(RecoverableFileError); ok {
 		if !(isCacheFile(info.Domain) ||
 			(isWriteToBackStore(info.Domain) && time.Since(instrument.ProgramStartTime) < *cacheDuration)) {
-			glog.V(2).Infof("not write to cache.")
 			return nil, reErr.Orig
 		}
-		glog.V(2).Infof("write to cache.")
 
 		wFile, er := bsh.createCacheFile(info, originalFile)
 		if er != nil {
