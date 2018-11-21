@@ -208,6 +208,7 @@ func NewDFSServer(lsnAddr net.Addr, name string, dbAddr *DBAddr, zk *notice.DfsZ
 	p := strings.TrimSpace(*preferred) // borrow a flag
 	if len(p) > 0 {
 		server.selector.startCachedFileRecoveryRoutine()
+		server.selector.startBSCompactRoutine()
 	}
 
 	server.selector.startRecoveryDispatchRoutine()

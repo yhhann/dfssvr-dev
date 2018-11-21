@@ -4,9 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -404,6 +407,47 @@ func (hs *HandlerSelector) startRecoveryDispatchRoutine() {
 				}
 			}
 		}
+	}()
+}
+
+// startBSCompactRoutine() starts a routine to compact backstore at midnight.
+func (hs *HandlerSelector) startBSCompactRoutine() {
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+
+		if hs.backStoreShard == nil || hs.backStoreShard.MasterUri == "" {
+			return
+		}
+		master := strings.Split(hs.backStoreShard.MasterUri, ",")
+		if len(master) == 0 {
+			return
+		}
+
+		glog.Infof("Start a routine to compact backstore, %v", master)
+		for {
+			select {
+			case <-ticker.C:
+				h := time.Now().Hour()
+				if h >= 1 && h < 2 {
+					for _, uri := range master {
+						resp, err := http.Get("http://" + uri + "/vol/vacuum")
+						if err == nil {
+							body, err := ioutil.ReadAll(resp.Body)
+							if err == nil {
+								glog.Infof("Succeeded to compact backstore, %s\n%s", uri, string(body))
+							}
+
+							resp.Body.Close()
+							break
+						}
+
+						glog.Warningf("Failed to compact backstore, %s, %v", uri, err)
+					}
+				}
+			}
+		}
+
 	}()
 }
 
