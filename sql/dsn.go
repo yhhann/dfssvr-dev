@@ -22,7 +22,7 @@ func ConvertDSN(originDSN string) ([]string, error) {
 
 	addrs := strings.Split(addr, ",")
 
-	dsns := make([]string, 0)
+	dsns := make([]string, 0, len(addrs))
 	for _, a := range addrs {
 		a = strings.TrimSpace(a)
 		if a == "" {
@@ -30,9 +30,7 @@ func ConvertDSN(originDSN string) ([]string, error) {
 		}
 		cnf := *originCnf
 		cnf.Addr = a
-		dsn := cnf.FormatDSN()
-
-		dsns = append(dsns, dsn)
+		dsns = append(dsns, cnf.FormatDSN())
 	}
 
 	return dsns, nil

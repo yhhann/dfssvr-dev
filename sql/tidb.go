@@ -28,6 +28,8 @@ const (
 	d_select        = "SELECT fid, createdtime from dupl WHERE did = ?"
 	d_delete_bydid  = "DELETE FROM dupl WHERE did=?"
 	d_delete_byfid  = "DELETE FROM dupl WHERE fid=?"
+
+	TimeLayout = "2006-01-02 15:04:05"
 )
 
 var (
@@ -72,8 +74,7 @@ func (operator *FOperator) LookupFile(ctx context.Context, fid string) (*File, e
 			return err
 		}
 
-		timeLayout := "2006-01-02 15:04:05"
-		fm.UploadTime, err = time.Parse(timeLayout, upload_time)
+		fm.UploadTime, err = time.Parse(TimeLayout, upload_time)
 
 		attrs, err := operator.getFileAttrs(ctx, tx, fid)
 		if err != nil {
@@ -106,8 +107,7 @@ func (operator *FOperator) LookupFileByDid(ctx context.Context, did string) (*Fi
 			return err
 		}
 
-		timeLayout := "2006-01-02 15:04:05"
-		fm.UploadTime, err = time.Parse(timeLayout, upload_time)
+		fm.UploadTime, err = time.Parse(TimeLayout, upload_time)
 
 		attrs, err := operator.getFileAttrs(ctx, tx, fm.FId)
 		if err != nil {
@@ -153,8 +153,7 @@ func (operator *FOperator) LookupFileByMD5(ctx context.Context, md5 string, doma
 // SaveFile saves file metadata and it's attributes if any.
 func (operator *FOperator) SaveFile(ctx context.Context, fm *File) error {
 	return operator.Tx(func(tx *sql.Tx) error {
-		err := operator.saveFile(ctx, tx, fm)
-		if err != nil {
+		if err := operator.saveFile(ctx, tx, fm); err != nil {
 			return err
 		}
 
@@ -259,8 +258,7 @@ func (operator *FOperator) saveAttrs(ctx context.Context, tx *sql.Tx, fid string
 	defer stmt.Close()
 
 	for k, v := range attrs {
-		_, err := stmt.Exec(fid, k, v)
-		if err != nil {
+		if _, err := stmt.Exec(fid, k, v); err != nil {
 			return err
 		}
 	}
@@ -275,8 +273,7 @@ func (operator *FOperator) saveDupl(ctx context.Context, tx *sql.Tx, fid string,
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(did, fid, createDate)
-	if err != nil {
+	if _, err = stmt.Exec(did, fid, createDate); err != nil {
 		return err
 	}
 
@@ -284,14 +281,13 @@ func (operator *FOperator) saveDupl(ctx context.Context, tx *sql.Tx, fid string,
 }
 
 func (operator *FOperator) refInc(ctx context.Context, tx *sql.Tx, fid string) error {
-	stmt1, err := tx.Prepare(f_ref_inc_one)
+	stmt, err := tx.Prepare(f_ref_inc_one)
 	if err != nil {
 		return err
 	}
-	defer stmt1.Close()
+	defer stmt.Close()
 
-	_, err = stmt1.Exec(fid)
-	if err != nil {
+	if _, err = stmt.Exec(fid); err != nil {
 		return err
 	}
 
@@ -299,14 +295,13 @@ func (operator *FOperator) refInc(ctx context.Context, tx *sql.Tx, fid string) e
 }
 
 func (operator *FOperator) refDec(ctx context.Context, tx *sql.Tx, fid string) error {
-	stmt1, err := tx.Prepare(f_ref_dec_one)
+	stmt, err := tx.Prepare(f_ref_dec_one)
 	if err != nil {
 		return err
 	}
-	defer stmt1.Close()
+	defer stmt.Close()
 
-	_, err = stmt1.Exec(fid)
-	if err != nil {
+	if _, err = stmt.Exec(fid); err != nil {
 		return err
 	}
 
@@ -314,15 +309,14 @@ func (operator *FOperator) refDec(ctx context.Context, tx *sql.Tx, fid string) e
 }
 
 func (operator *FOperator) getRef(ctx context.Context, tx *sql.Tx, fid string) (int, error) {
-	stmt1, err := tx.Prepare("SELECT refcnt FROM file where id = ?")
+	stmt, err := tx.Prepare("SELECT refcnt FROM file where id = ?")
 	if err != nil {
 		return -1, err
 	}
-	defer stmt1.Close()
+	defer stmt.Close()
 
 	var refcnt int
-	err = stmt1.QueryRow(fid).Scan(&refcnt)
-	if err != nil {
+	if err = stmt.QueryRow(fid).Scan(&refcnt); err != nil {
 		return -1, err
 	}
 
@@ -336,8 +330,7 @@ func (operator *FOperator) removeFileAndAttrs(ctx context.Context, tx *sql.Tx, f
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(fid)
-	if err != nil {
+	if _, err = stmt.Exec(fid); err != nil {
 		return err
 	}
 
@@ -347,8 +340,7 @@ func (operator *FOperator) removeFileAndAttrs(ctx context.Context, tx *sql.Tx, f
 	}
 	defer stmt1.Close()
 
-	_, err = stmt1.Exec(fid)
-	if err != nil {
+	if _, err = stmt1.Exec(fid); err != nil {
 		return err
 	}
 
@@ -398,13 +390,13 @@ func (operator *FOperator) removeFile(ctx context.Context, tx *sql.Tx, fid strin
 func (operator *FOperator) getFileAttrs(ctx context.Context, tx *sql.Tx, fid string) (map[string]string, error) {
 	attrs := make(map[string]string)
 
-	stmt1, err := tx.Prepare(a_select)
+	stmt, err := tx.Prepare(a_select)
 	if err != nil {
 		return attrs, err
 	}
-	defer stmt1.Close()
+	defer stmt.Close()
 
-	rows, err := stmt1.Query(fid)
+	rows, err := stmt.Query(fid)
 	if err != nil {
 		return attrs, err
 	}
@@ -444,8 +436,7 @@ func (operator *FOperator) Tx(target func(*sql.Tx) error) error {
 		}
 	}()
 
-	err = target(tx)
-	if err == sql.ErrNoRows {
+	if err = target(tx); err == sql.ErrNoRows {
 		err = meta.FileNotFound
 	}
 

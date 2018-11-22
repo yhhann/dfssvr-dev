@@ -49,11 +49,8 @@ func (h *GlustiHandler) initLogDir() error {
 	if os.IsNotExist(err) {
 		return os.MkdirAll(logDir, 0700)
 	}
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return err
 }
 
 // initVolume initializes gluster volume.
@@ -80,8 +77,10 @@ func (h *GlustiHandler) initVolume() error {
 
 // Close releases resources.
 func (h *GlustiHandler) Close() error {
+	// Unmount() always returns non-zero presently,
+	// so I ignore the return value.
 	h.Unmount()
-	return nil // For compatible with Unmount returns.
+	return nil
 }
 
 // Create creates a DFSFile for write.
@@ -298,12 +297,12 @@ func (h *GlustiHandler) FindByMd5(md5 string, domain int64, size int64) (string,
 	return file.Id, nil
 }
 
-// Create creates a DFSFile with the given id.
+// CreateWithGivenId creates a DFSFile with the given id.
 func (h *GlustiHandler) CreateWithGivenId(info *transfer.FileInfo) (DFSFile, error) {
 	return h.Create(info)
 }
 
-// Duplicate duplicates an entry with the given id.
+// DuplicateWithGivenId duplicates an entry with the given id.
 func (h *GlustiHandler) DuplicateWithGivenId(primaryId string, dupId string) (string, error) {
 	return h.tiop.DuplicateWithId(primaryId, dupId, time.Time{})
 }

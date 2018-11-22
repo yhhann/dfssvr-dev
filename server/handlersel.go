@@ -197,9 +197,9 @@ func (hs *HandlerSelector) addHandler(shard *metadata.Shard) (err error) {
 
 	if hs.minorHandler != nil {
 		if shard.ShdType == metadata.Glustergo {
-			if err = hs.minorHandler.InitVolumeCB(shard.VolHost, shard.VolName, shard.VolBase); err != nil {
-				glog.Info("Failed to initialize volume for handler %s", hs.minorHandler.Name())
-				return
+			if err := hs.minorHandler.InitVolumeCB(shard.VolHost, shard.VolName, shard.VolBase); err != nil {
+				glog.Info("Failed to initialize volume for handler %s, %v", hs.minorHandler.Name(), err)
+				return err
 			}
 
 			handler = fileop.NewTeeHandler(handler, hs.minorHandler)

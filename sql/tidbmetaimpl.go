@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	//	"github.com/golang/glog"
 	"gopkg.in/mgo.v2/bson"
 
 	"jingoal.com/dfs/meta"
@@ -30,16 +29,9 @@ func (impl *TiDBMetaImpl) Save(f *meta.File) error {
 	if f.Type == meta.EntityNone {
 		return errors.New("File type unknown.")
 	}
-
 	ctx := context.Background()
 
-	tf := ToTiDBFile(f)
-	err := impl.Session(ctx).SaveFile(ctx, tf)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return impl.Session(ctx).SaveFile(ctx, ToTiDBFile(f))
 }
 
 // Find looks up the metadata of a file by its fid.

@@ -74,8 +74,7 @@ func (mgr *DatabaseMgr) session(ctx context.Context) (*FOperator, error) {
 
 func (mgr *DatabaseMgr) Close() {
 	for a, op := range mgr.servers {
-		err := op.Close()
-		if err != nil {
+		if err := op.Close(); err != nil {
 			glog.Errorf("Failed to close session %s, error %v", a, err)
 		}
 	}
