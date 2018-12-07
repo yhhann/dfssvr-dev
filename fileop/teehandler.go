@@ -65,13 +65,13 @@ func (h *TeeHandler) Open(id string, domain int64) (DFSFile, error) {
 				Name:  "open_failed",
 				Value: 1.0,
 			}
-			glog.Warningf("Failed to open file %v on minor %s, %v.", tf.minorFile.GetFileInfo(), h.Name(), err)
+			glog.Warningf("Failed to open file %v on minor %s, %v.", tf.GetFileInfo(), h.Name(), err)
 		} else {
 			instrument.MinorFileCounter <- &instrument.Measurements{
 				Name:  "opened",
 				Value: 1.0,
 			}
-			glog.V(2).Infof("Open file %v on minor %s.", tf.minorFile.GetFileInfo().Id, h.Name())
+			glog.V(2).Infof("Open file %v on minor %s.", tf.GetFileInfo().Id, h.Name())
 
 			// How to deal with 'file not found'?
 			return tf, nil
@@ -80,11 +80,11 @@ func (h *TeeHandler) Open(id string, domain int64) (DFSFile, error) {
 
 	tf.majorFile, err = h.major.Open(id, domain)
 	if err != nil {
-		glog.Warningf("Failed to open file %v on major %s, %v.", tf.minorFile.GetFileInfo(), h.Name(), err)
+		glog.Warningf("Failed to open file %v on major %s, %v.", tf.GetFileInfo(), h.Name(), err)
 		return nil, err
 	}
 
-	glog.V(2).Infof("Open file %v on minor %s.", tf.minorFile.GetFileInfo().Id, h.Name())
+	glog.V(2).Infof("Open file %v on minor %s.", tf.GetFileInfo().Id, h.Name())
 	return tf, nil
 }
 

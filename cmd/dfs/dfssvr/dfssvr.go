@@ -18,9 +18,7 @@ import (
 	"jingoal.com/dfs/proto/discovery"
 	"jingoal.com/dfs/proto/transfer"
 	"jingoal.com/dfs/server"
-	jgrpc "jingoal.com/letsgo/grpc"
-	jrt "jingoal.com/letsgo/runtime"
-	jver "jingoal.com/letsgo/version"
+	"jingoal.com/dfs/util"
 )
 
 var (
@@ -83,8 +81,6 @@ func init() {
 // This is a DFSServer instance.
 func main() {
 	flag.Parse()
-	jrt.EnableGoroutineDump()
-	jver.PrintGlog()
 
 	zk := notice.NewDfsZK(strings.Split(*zkAddr, ","), time.Duration(*zkTimeout)*time.Millisecond)
 	conf.NewConf(conf.DfssvrConfPath, conf.DfssvrPrefix, *serverId, zk)
@@ -139,8 +135,8 @@ func main() {
 		sopts = append(sopts, grpc.RPCDecompressor(grpc.NewGZIPDecompressor()))
 	}
 
-	sopts = append(sopts, grpc.UnaryInterceptor(jgrpc.UnaryRecoverServerInterceptor))
-	sopts = append(sopts, grpc.StreamInterceptor(jgrpc.StreamRecoverServerInterceptor))
+	sopts = append(sopts, grpc.UnaryInterceptor(util.UnaryRecoverServerInterceptor))
+	sopts = append(sopts, grpc.StreamInterceptor(util.StreamRecoverServerInterceptor))
 
 	grpcServer := grpc.NewServer(sopts...)
 	transfer.RegisterFileTransferServer(grpcServer, dfsServer)
